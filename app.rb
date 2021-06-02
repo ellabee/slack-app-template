@@ -151,6 +151,12 @@ module Donut
           channel: assignee_channel_id
         )
         client.chat_postMessage(task_request_params)
+
+        # Notify actor of successfully requested task
+        client.chat_postMessage(
+          channel: actor_channel_id,
+          text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{description}"
+        )
       end
 
       200
