@@ -40,7 +40,7 @@ module Donut
 
     ###
     #
-    # Slack payload formations
+    # Slack response payload formations
     #
     ###
     MODAL_PAYLOAD = {
@@ -108,7 +108,7 @@ module Donut
         button_context = "Click the button once the task has been completed, and we'll notify them that it's been done!"
       end
 
-      payload = {
+      {
         "blocks": [
           {
             "block_id": "task_description",
