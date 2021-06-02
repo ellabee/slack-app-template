@@ -83,11 +83,11 @@ docker compose build
 Install the gems:
 
 ```sh
-docker compose run --rm api bundle install
+docker-compose run --rm api bundle install
 ```
 
 ```sh
-docker compose up
+docker-compose up
 ```
 
 Now, when you visit `https://<your_ngrok_subdomain_here>.ngrok.io`, or when slack sends requests to it, the traffic will be routed to your locally running instance of this application.
