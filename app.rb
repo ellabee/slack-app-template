@@ -29,6 +29,17 @@ module Donut
 
     ###
     #
+    # Slack request payload type map
+    #
+    ###
+    INTERACTIONS = {
+      'shortcut' =>        :shortcut_initiated,
+      'view_submission' => :task_requested,
+      'block_actions' =>   :task_completed
+    }.freeze
+
+    ###
+    #
     # Slack payload formations
     #
     ###
@@ -175,36 +186,34 @@ module Donut
       client = Slack::Web::Client.new
       actor_id = payload[:user][:id]
 
-      case payload[:type]
-      when 'shortcut'
+      case INTERACTIONS[payload[:type]]
+      when :shortcut_initiated
         client.views_open(view: MODAL_PAYLOAD, trigger_id: payload[:trigger_id])
-      when 'view_submission'
+      when :task_requested
         assignee_id = payload[:view][:state][:values][:request_task_from][:conversation_id][:selected_conversation]
-        description = payload[:view][:state][:values][:task_description][:description][:value]
+        task_description = payload[:view][:state][:values][:task_description][:description][:value]
 
         # TODO: handle error / early return if either channel_id not found
         actor_channel_id = client.conversations_open(users: actor_id).channel.id
         assignee_channel_id = client.conversations_open(users: assignee_id).channel.id
 
-        # Notify assignee of requested task
         # TODO: include `text` param fallback for `blocks` ?
         task_message_params = Donut::App.requested_task_message_payload(
           requester: actor_id,
           assignee: assignee_id,
-          description: description
+          description: task_description
         ).merge(
           channel: assignee_channel_id
         )
         client.chat_postMessage(task_message_params)
 
         unless actor_id == assignee_id
-          # Notify actor of successfully requested task
           client.chat_postMessage(
             channel: actor_channel_id,
-            text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{description}"
+            text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{task_description}"
           )
         end
-      when 'block_actions'
+      when :task_completed
         original_task_values = payload[:actions][0][:value].split(/:/)
         requester_id = original_task_values.first
         task_description = original_task_values.last
@@ -213,7 +222,6 @@ module Donut
         actor_channel_id = client.conversations_open(users: actor_id).channel.id
         requester_channel_id = client.conversations_open(users: requester_id).channel.id
 
-        # Update interactive message for assignee to indicate completed status
         # TODO: include `text` param fallback for `blocks` ?
         task_message_params = Donut::App.completed_task_message_payload(
           requester: requester_id,
@@ -227,7 +235,6 @@ module Donut
         client.chat_update(task_message_params)
 
         unless actor_id == requester_id
-          # Notify requester of task completion
           client.chat_postMessage(
             channel: requester_channel_id,
             text: ":white_check_mark: <@#{actor_id}> has completed the following task: #{task_description}"
