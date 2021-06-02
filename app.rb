@@ -77,6 +77,48 @@ module Donut
       ]
     }.freeze
 
+    def self.requested_task_message_payload(from:, description:)
+        {
+          "blocks": [
+            {
+              "block_id": "task_description",
+              "type": "context",
+              "elements": [
+                {
+                  "type": "mrkdwn",
+                  "text": "*<@#{from}> has requested the following task:* #{description}",
+                }
+              ]
+            },
+            {
+              "type": "actions",
+              "elements": [
+                {
+                  "type": "button",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "Completed",
+                    "emoji": true
+                  },
+                  "style": "primary",
+                  "value": "#{from}:#{description}"
+                }
+              ]
+            },
+            {
+              "type": "context",
+              "elements": [
+                {
+                  "type": "plain_text",
+                  "text": "Click the button once the task has been completed, and we'll notify them that it's been done!",
+                  "emoji": true,
+                }
+              ]
+            }
+          ]
+        }
+    end
+
     ###
     #
     # Routes
@@ -93,6 +135,22 @@ module Donut
       case payload[:type]
       when 'shortcut'
         client.views_open(view: MODAL_PAYLOAD, trigger_id: payload[:trigger_id])
+      when 'view_submission'
+        assignee_id = payload[:view][:state][:values][:request_task_from][:conversation_id][:selected_conversation]
+        description = payload[:view][:state][:values][:task_description][:description][:value]
+
+        # TODO: handle error / early return if either channel_id not found
+        actor_channel_id = client.conversations_open(users: actor_id).channel.id
+        assignee_channel_id = client.conversations_open(users: assignee_id).channel.id
+
+        # Notify assignee of requested task
+        task_request_params = Donut::App.requested_task_message_payload(
+          from: actor_id,
+          description: description
+        ).merge(
+          channel: assignee_channel_id
+        )
+        client.chat_postMessage(task_request_params)
       end
 
       200
