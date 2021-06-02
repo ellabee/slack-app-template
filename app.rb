@@ -27,6 +27,11 @@ module Donut
       set :logger, Donut::App.logger
     end
 
+    ###
+    #
+    # Slack payload formations
+    #
+    ###
     MODAL_PAYLOAD = {
       "type": "modal",
       "title": {
@@ -77,49 +82,64 @@ module Donut
       ]
     }.freeze
 
-    def self.requested_task_message_payload(from:, description:)
-        {
-          "blocks": [
-            {
-              "block_id": "task_description",
-              "type": "context",
-              "elements": [
-                {
-                  "type": "mrkdwn",
-                  "text": "*<@#{from}> has requested the following task:* #{description}",
-                }
-              ]
-            },
-            {
-              "type": "actions",
-              "elements": [
-                {
-                  "type": "button",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "Completed",
-                    "emoji": true
-                  },
-                  "style": "primary",
-                  "value": "#{from}:#{description}"
-                }
-              ]
-            },
-            {
-              "type": "context",
-              "elements": [
-                {
+    def self.requested_task_message_payload(requester:, assignee:, description:)
+      if requester == assignee
+        task_context = "*You have assigned yourself the following task:* #{description}"
+        button_context = "Click the button once the task has been completed to mark as done"
+      else
+        task_context = "*<@#{requester}> has requested the following task:* #{description}"
+        button_context = "Click the button once the task has been completed, and we'll notify them that it's been done!"
+      end
+
+      payload = {
+        "blocks": [
+          {
+            "block_id": "task_description",
+            "type": "context",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": task_context,
+              }
+            ]
+          },
+          {
+            "type": "actions",
+            "elements": [
+              {
+                "type": "button",
+                "text": {
                   "type": "plain_text",
-                  "text": "Click the button once the task has been completed, and we'll notify them that it's been done!",
-                  "emoji": true,
-                }
-              ]
-            }
-          ]
-        }
+                  "text": "Completed",
+                  "emoji": true
+                },
+                "style": "primary",
+                "value": "#{requester}:#{description}"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "elements": [
+              {
+                "type": "plain_text",
+                "text": button_context,
+                "emoji": true,
+              }
+            ]
+          }
+        ]
+      }
     end
 
-    def self.completed_task_message_payload(from:, description:)
+    def self.completed_task_message_payload(requester:, assignee:, description:)
+      task_context =
+        if requester == assignee
+          "~*You have assigned yourself the following task:* #{description}~"
+        else
+          "~*<@#{requester}> has requested the following task:* #{description}~"
+        end
+
       {
         "blocks": [
           {
@@ -127,7 +147,7 @@ module Donut
             "elements": [
               {
                 "type": "mrkdwn",
-                "text": "~*<@#{from}> has requested the following task:* #{description}~",
+                "text": task_context,
               }
             ]
           },
@@ -167,19 +187,23 @@ module Donut
         assignee_channel_id = client.conversations_open(users: assignee_id).channel.id
 
         # Notify assignee of requested task
-        task_request_params = Donut::App.requested_task_message_payload(
-          from: actor_id,
+        # TODO: include `text` param fallback for `blocks` ?
+        task_message_params = Donut::App.requested_task_message_payload(
+          requester: actor_id,
+          assignee: assignee_id,
           description: description
         ).merge(
           channel: assignee_channel_id
         )
-        client.chat_postMessage(task_request_params)
+        client.chat_postMessage(task_message_params)
 
-        # Notify actor of successfully requested task
-        client.chat_postMessage(
-          channel: actor_channel_id,
-          text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{description}"
-        )
+        unless actor_id == assignee_id
+          # Notify actor of successfully requested task
+          client.chat_postMessage(
+            channel: actor_channel_id,
+            text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{description}"
+          )
+        end
       when 'block_actions'
         original_task_values = payload[:actions][0][:value].split(/:/)
         requester_id = original_task_values.first
@@ -190,21 +214,25 @@ module Donut
         requester_channel_id = client.conversations_open(users: requester_id).channel.id
 
         # Update interactive message for assignee to indicate completed status
-        task_request_params = Donut::App.completed_task_message_payload(
-          from: requester_id,
+        # TODO: include `text` param fallback for `blocks` ?
+        task_message_params = Donut::App.completed_task_message_payload(
+          requester: requester_id,
+          assignee: actor_id,
           description: task_description,
         ).merge(
           channel: actor_channel_id,
           ts: payload[:message][:ts],
           as_user: true
         )
-        client.chat_update(task_request_params)
+        client.chat_update(task_message_params)
 
-        # Notify task requester
-        client.chat_postMessage(
-          channel: requester_channel_id,
-          text: ":white_check_mark: <@#{actor_id}> has completed the following task: #{task_description}"
-        )
+        unless actor_id == requester_id
+          # Notify requester of task completion
+          client.chat_postMessage(
+            channel: requester_channel_id,
+            text: ":white_check_mark: <@#{actor_id}> has completed the following task: #{task_description}"
+          )
+        end
       end
 
       200
