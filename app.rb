@@ -68,13 +68,19 @@ module Donut
           "block_id": "request_task_from",
           "type": "input",
           "optional": false,
+          "element": {
+            "type": "users_select",
+            "placeholder": {
+              "type": "plain_text",
+              "text": "Select teammate",
+              "emoji": true
+            },
+            "action_id": "assignee_id",
+          },
           "label": {
             "type": "plain_text",
-            "text": "Request task from:"
-          },
-          "element": {
-            "action_id": "conversation_id",
-            "type": "conversations_select"
+            "text": "Request task from",
+            "emoji": true
           }
         },
         {
@@ -190,7 +196,7 @@ module Donut
       when :shortcut_initiated
         client.views_open(view: MODAL_PAYLOAD, trigger_id: payload[:trigger_id])
       when :task_requested
-        assignee_id = payload[:view][:state][:values][:request_task_from][:conversation_id][:selected_conversation]
+        assignee_id = payload[:view][:state][:values][:request_task_from][:assignee_id][:selected_user]
         task_description = payload[:view][:state][:values][:task_description][:description][:value]
 
         # TODO: handle error / early return if either channel_id not found
