@@ -27,6 +27,56 @@ module Donut
       set :logger, Donut::App.logger
     end
 
+    MODAL_PAYLOAD = {
+      "type": "modal",
+      "title": {
+        "type": "plain_text",
+        "text": "Request a task",
+        "emoji": true
+      },
+      "submit": {
+        "type": "plain_text",
+        "text": "Request",
+        "emoji": true
+      },
+      "close": {
+        "type": "plain_text",
+        "text": "Cancel",
+        "emoji": true
+      },
+      "blocks": [
+        {
+          "type": "divider"
+        },
+        {
+          "block_id": "request_task_from",
+          "type": "input",
+          "optional": false,
+          "label": {
+            "type": "plain_text",
+            "text": "Request task from:"
+          },
+          "element": {
+            "action_id": "conversation_id",
+            "type": "conversations_select"
+          }
+        },
+        {
+          "block_id": "task_description",
+          "type": "input",
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "description"
+          },
+          "label": {
+            "type": "plain_text",
+            "text": "Description of task:",
+            "emoji": true
+          }
+        }
+      ]
+    }.freeze
+
     ###
     #
     # Routes
@@ -38,16 +88,19 @@ module Donut
       Donut::App.logger.info "\n[+] Payload:\n#{JSON.pretty_generate(payload)}"
 
       client = Slack::Web::Client.new
-      user_id = payload[:user][:id]
-      channel_id = client.conversations_open(users: user_id).channel.id
-      client.chat_postMessage(channel: channel_id, text: "Hello, <@#{user_id}>!")
+      actor_id = payload[:user][:id]
+
+      case payload[:type]
+      when 'shortcut'
+        client.views_open(view: MODAL_PAYLOAD, trigger_id: payload[:trigger_id])
+      end
 
       200
     end
 
     # Use this to verify that your server is running and handling requests.
     get '/' do
-      'Hello, world!'
+      'Hello, tofu!'
     end
   end
 end
