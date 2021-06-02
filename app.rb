@@ -119,6 +119,29 @@ module Donut
         }
     end
 
+    def self.completed_task_message_payload(from:, description:)
+      {
+        "blocks": [
+          {
+            "type": "context",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "~*<@#{from}> has requested the following task:* #{description}~",
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "text": {
+              "type": "mrkdwn",
+              "text": ":white_check_mark: Task complete!"
+            }
+          }
+        ]
+      }
+    end
+
     ###
     #
     # Routes
@@ -156,6 +179,31 @@ module Donut
         client.chat_postMessage(
           channel: actor_channel_id,
           text: ":speech_balloon: You have requested <@#{assignee_id}> to do the following task: #{description}"
+        )
+      when 'block_actions'
+        original_task_values = payload[:actions][0][:value].split(/:/)
+        requester_id = original_task_values.first
+        task_description = original_task_values.last
+
+        # TODO: handle error / early return if either channel_id not found
+        actor_channel_id = client.conversations_open(users: actor_id).channel.id
+        requester_channel_id = client.conversations_open(users: requester_id).channel.id
+
+        # Update interactive message for assignee to indicate completed status
+        task_request_params = Donut::App.completed_task_message_payload(
+          from: requester_id,
+          description: task_description,
+        ).merge(
+          channel: actor_channel_id,
+          ts: payload[:message][:ts],
+          as_user: true
+        )
+        client.chat_update(task_request_params)
+
+        # Notify task requester
+        client.chat_postMessage(
+          channel: requester_channel_id,
+          text: ":white_check_mark: <@#{actor_id}> has completed the following task: #{task_description}"
         )
       end
 
